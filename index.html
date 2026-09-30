@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Studio Loop — Web DAW</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+  <!-- ============ TOP BAR ============ -->
+  <header id="topbar">
+    <div class="brand"><span class="logo">◆</span> STUDIO<b>LOOP</b></div>
+    <div class="menu">
+      <button class="menu-btn" data-menu="file">File ▾</button>
+      <button class="menu-btn" data-menu="edit">Edit ▾</button>
+      <button class="menu-btn" data-menu="add">Tambah ▾</button>
+    </div>
+    <div class="transport">
+      <button id="btnStop" title="Stop (kembali ke awal)">■</button>
+      <button id="btnPlay" title="Play / Pause (Spasi)">▶</button>
+      <button id="btnRec" title="Rekam audio dari mikrofon (R)">●</button>
+      <button id="btnLoop" class="toggle" title="Loop region (L)">⟲</button>
+      <button id="btnMetro" class="toggle" title="Metronom">♩</button>
+    </div>
+    <div class="lcd">
+      <div id="timeBars">001:1:000</div>
+      <div id="timeSecs">0:00.00</div>
+    </div>
+    <div class="field"><label>BPM</label><input id="bpm" type="number" min="40" max="240" step="1" value="110"></div>
+    <div class="field"><label>Snap</label>
+      <select id="snap">
+        <option value="4">1 Bar</option>
+        <option value="1">1 Beat</option>
+        <option value="0.5">1/2 Beat</option>
+        <option value="0.25" selected>1/4 Beat (Step)</option>
+        <option value="0.125">1/8 Beat</option>
+        <option value="0">Bebas</option>
+      </select>
+    </div>
+    <div class="tools" id="tools">
+      <button data-tool="pointer" class="active" title="Pointer / Pilih (P)">➤</button>
+      <button data-tool="draw" title="Pensil / Gambar (B)">✎</button>
+      <button data-tool="slice" title="Pisau / Split (C)">✂</button>
+      <button data-tool="erase" title="Hapus (E)">⌫</button>
+      <button data-tool="mute" title="Mute clip (T)">🔇</button>
+    </div>
+    <div class="field master"><label>Master</label><input id="masterVol" type="range" min="0" max="1.25" step="0.01" value="0.9"><canvas id="masterMeter" width="80" height="14"></canvas></div>
+    <div class="status" id="status">Siap</div>
+  </header>
+
+  <div id="main">
+    <!-- ============ BROWSER ============ -->
+    <aside id="browser">
+      <div class="panel-title">BROWSER</div>
+      <div class="browser-section">
+        <div class="sec-head">🎼 Instrumen (sampel asli)</div>
+        <div id="instList"></div>
+      </div>
+      <div class="browser-section">
+        <div class="sec-head">🔊 Sound FX / Audio
+          <span class="sec-actions">
+            <button id="btnImport" title="Import MP3/WAV/OGG">＋ Import</button>
+          </span>
+        </div>
+        <div class="hint">Seret file MP3/WAV ke playlist, atau klik Import. Rekaman mic juga masuk sini.</div>
+        <div id="fxList"></div>
+        <input id="fileInput" type="file" accept="audio/*,.mp3,.wav,.ogg,.m4a,.flac" multiple hidden>
+      </div>
+    </aside>
+
+    <!-- ============ PLAYLIST / ARRANGEMENT ============ -->
+    <section id="playlist">
+      <div class="panel-title">PLAYLIST — Arrangement
+        <span class="pl-actions">
+          <button id="btnAddInst" title="Tambah track instrumen">＋ Instrumen</button>
+          <button id="btnAddAudio" title="Tambah track audio">＋ Audio</button>
+          <button id="zoomOut" title="Zoom out (Ctrl+scroll)">－</button>
+          <button id="zoomIn" title="Zoom in">＋</button>
+        </span>
+      </div>
+      <div id="arrWrap">
+        <div id="trackHeadsWrap">
+          <div id="rulerCorner"></div>
+          <div id="trackHeadsClip"><div id="trackHeads"></div></div>
+        </div>
+        <div id="arrCanvasWrap">
+          <canvas id="ruler"></canvas>
+          <canvas id="arr"></canvas>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ============ BOTTOM DOCK ============ -->
+  <div id="dockResize" title="Seret untuk ubah tinggi"></div>
+  <section id="dock">
+    <div class="tabs" id="tabs">
+      <button data-tab="piano" class="active">🎹 Piano Roll</button>
+      <button data-tab="rack">🥁 Channel Rack</button>
+      <button data-tab="mixer">🎚 Mixer</button>
+      <button data-tab="clip">🎛 Clip / Efek</button>
+      <span class="tab-info" id="tabInfo"></span>
+    </div>
+    <div class="tab-page active" id="page-piano">
+      <div class="pr-toolbar">
+        <span id="prTitle">Pilih clip instrumen (klik 2x di playlist)</span>
+        <label>Panjang pola (beat) <input id="prPatLen" type="number" min="1" max="256" step="1" value="16"></label>
+        <label>Panjang nada <select id="prNoteLen">
+          <option value="0.25">1/16</option><option value="0.5">1/8</option><option value="1" selected>1/4</option><option value="2">1/2</option><option value="4">1 Bar</option>
+        </select></label>
+        <button id="prQuant">Quantize</button>
+        <button id="prSelAll">Pilih semua</button>
+        <button id="prZoomOut">－</button><button id="prZoomIn">＋</button>
+        <span class="hint">Klik = tambah nada · seret = geser · tepi kanan = panjang · klik kanan = hapus · Ctrl+seret = seleksi · ↑↓ transpose</span>
+      </div>
+      <div class="pr-wrap"><canvas id="pr"></canvas></div>
+    </div>
+    <div class="tab-page" id="page-rack">
+      <div class="pr-toolbar">
+        <span id="rackTitle">Step sequencer untuk clip terpilih</span>
+        <label>Oktaf (melodi) <input id="rackOct" type="number" min="1" max="7" value="4"></label>
+        <span class="hint">Klik kotak untuk menyalakan step (1 kotak = 1/16 = 1 step). Klik nama baris untuk dengar. Pilih channel di atas.</span>
+      </div>
+      <div id="rack"></div>
+    </div>
+    <div class="tab-page" id="page-mixer"><div id="mixer"></div></div>
+    <div class="tab-page" id="page-clip"><div id="inspector"></div></div>
+  </section>
+</div>
+
+<div id="ctxMenu" class="ctx-menu hidden"></div>
+<div id="dropOverlay" class="hidden">Lepaskan file audio untuk dijadikan clip / sound effect</div>
+<div id="loading" class="hidden"><div class="spinner"></div><span id="loadingText">Memuat sampel…</span></div>
+
+<script src="js/instruments.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/project.js"></script>
+<script src="js/arrange.js"></script>
+<script src="js/pianoroll.js"></script>
+<script src="js/panels.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
