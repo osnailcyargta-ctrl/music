@@ -29,7 +29,7 @@ function makeTrack(type, inst) {
     id: uid('t'), type, inst: inst || null,
     name: def ? def.name : 'Audio ' + (P.tracks.filter((t) => t.type === 'audio').length + 1),
     color: def ? def.color : TRACK_COLORS[idx % TRACK_COLORS.length],
-    vol: 1, pan: 0, reverb: 0.12, delay: 0, eq: { low: 0, mid: 0, high: 0 }, transpose: 0,
+    vol: 1, pan: 0, reverb: 0.12, delay: 0, eq: { low: 0, mid: 0, high: 0 }, transpose: 0, crush: defaultCrush(),
     mute: false, solo: false, arm: false, auto: emptyAuto(), showAuto: null,
     clips: [],
   };
@@ -143,6 +143,7 @@ function normalizeProject(p) {
     if (!t.auto) t.auto = emptyAuto();
     for (const k of AUTO_ORDER) if (!t.auto[k]) t.auto[k] = [];
     if (!t.eq) t.eq = { low: 0, mid: 0, high: 0 };
+    if (!t.crush) t.crush = defaultCrush();
   }
   return p;
 }

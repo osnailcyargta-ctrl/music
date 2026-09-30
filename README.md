@@ -17,6 +17,9 @@ Studio musik lengkap yang jalan di browser, cukup HTML + CSS + JavaScript (tanpa
 | **Edit clip** | Split (tool ✂ / tombol S / di playhead), duplikat (Ctrl+D atau Ctrl+seret), copy-paste, mute clip, rename, reverse, fade in/out (seret kotak putih di pojok clip). |
 | **Pitch & speed clip audio** | Pitch ±24 semitone + fine cent, speed 0.25×–4×. Mode *Pertahankan pitch* (time-stretch WSOLA) atau mode *tape/resample* ala FL. |
 | **Keyframe / automation + kurva kustom** | Lane per track untuk **Volume, Pan, Reverb, Pitch, Speed, Filter**. Klik = tambah keyframe, seret titik = pindah, seret titik bulat kecil di tengah segmen = bentuk kurva (tension), klik kanan titik = jenis kurva (tunggal, S, hold, tangga, pulsa). |
+| **🎤→🎹 Dubler** | Nyanyi / senandung / ngomong nada ke mic, langsung jadi **note** di track instrumen terpilih (deteksi pitch YIN, bisa dikunci ke skala mayor/minor/pentatonik, geser oktaf, sensitivitas). Kalau track-nya **Drum Kit** = mode beatbox: "bum" → kick, "ka/pah" → snare, "tss" → hi-hat. Tombol 🎤→🎹 atau **D**; ⚙ untuk pengaturan. Clip audio yang sudah ada juga bisa: klik kanan → *Jadikan note*. |
+| **Volume 0–1000%** | Kotak **%** di header track, mixer, master, dan inspector (gain clip): ketik angka 0–1000 atau scroll di atasnya (Shift+scroll = ±50%). Slider biasa tetap sampai 150%. |
+| **Bitcrusher** | Per track (Mixer / tab Clip-Efek): on/off, bit depth 1–16, downsample 1–40×, mix dry/wet. Ikut ter-render saat export WAV. |
 | **Lainnya** | Undo/redo, loop region (seret di bagian atas ruler), metronom, BPM, snap grid, zoom, autosave otomatis (IndexedDB), simpan/buka project (.json berisi audio juga), **export WAV** (lagu penuh atau loop region). |
 
 ## Shortcut
@@ -25,6 +28,7 @@ Studio musik lengkap yang jalan di browser, cukup HTML + CSS + JavaScript (tanpa
 |---|---|
 | Spasi | Play / pause |
 | R | Rekam mic |
+| D | Dubler (suara → note) |
 | L | Loop on/off |
 | S | Split di playhead |
 | Ctrl+D | Duplikat clip / nada |
@@ -40,6 +44,7 @@ Studio musik lengkap yang jalan di browser, cukup HTML + CSS + JavaScript (tanpa
 ```
 index.html
 css/style.css
+js/dubler.js        Dubler: deteksi pitch & beatbox -> note
 js/instruments.js   definisi instrumen + loader sampel
 js/engine.js        audio engine (strip mixer, FX, automation, time-stretch, export WAV, rekam)
 js/project.js       data lagu, undo, simpan/buka, demo

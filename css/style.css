@@ -174,6 +174,25 @@ button.danger { background: #6a2d2d; }
 .auto-row .ac { width: 60px; color: var(--dim); }
 .auto-row button { padding: 1px 7px; font-size: 11px; }
 
+/* dubler */
+#btnDub { width: auto !important; padding: 0 8px !important; font-size: 12px !important; color: #7dff9b; }
+#btnDub.rec { background: #1f9d55; color: #fff; animation: blink 1s infinite; }
+#btnDubCfg { width: 26px !important; font-size: 12px !important; }
+#dubHud { position: fixed; top: 60px; left: 50%; transform: translateX(-50%); z-index: 90; background: rgba(20,26,30,.95); border: 2px solid #1f9d55; border-radius: 10px; padding: 10px 18px; text-align: center; width: 360px; box-shadow: 0 10px 30px rgba(0,0,0,.6); }
+.dub-title { color: #7dff9b; font-weight: 700; letter-spacing: 1px; }
+#dubNote { font-size: 44px; font-weight: 800; color: #fff; font-family: monospace; }
+.dub-bar { height: 6px; background: #111; border-radius: 3px; overflow: hidden; margin: 4px 0 6px; }
+#dubLevel { height: 100%; width: 0; background: linear-gradient(90deg, #3ddc84, #ffd84a); }
+.popover { position: fixed; z-index: 95; background: #2d353c; border: 1px solid #0d1013; border-radius: 6px; padding: 10px 12px; width: 300px; box-shadow: 0 8px 24px rgba(0,0,0,.5); }
+.popover h4 { margin: 0 0 6px; color: var(--accent); }
+/* input persen volume */
+.pct { width: 58px !important; font-family: monospace; font-size: 11px; color: var(--accent); text-align: right; padding: 1px 3px; }
+.pct-wrap { display: inline-flex; align-items: center; gap: 1px; font-size: 10px; color: var(--dim); }
+.tvol + .pct-wrap .pct { width: 48px !important; }
+.crush-row { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 2px; border-top: 1px solid #1a1f24; padding-top: 3px; }
+.crush-row .mknobs { grid-template-columns: repeat(3, 1fr); }
+button.crush-on { background: #c94cff; color: #fff; }
+
 /* context menu */
 .ctx-menu { position: fixed; z-index: 100; background: #2d353c; border: 1px solid #0d1013; border-radius: 5px; padding: 4px 0; min-width: 200px; box-shadow: 0 8px 24px rgba(0,0,0,.5); max-height: 80vh; overflow-y: auto; }
 .ctx-menu .item { padding: 5px 14px; cursor: pointer; white-space: nowrap; }
@@ -196,3 +215,5 @@ button.danger { background: #6a2d2d; }
   .status { display: none; }
   #dock { height: 260px; }
 }
+.pct::-webkit-outer-spin-button, .pct::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.pct { -moz-appearance: textfield; appearance: textfield; }

@@ -10,6 +10,7 @@ const App = {
 
   async boot() {
     E.init();
+    await loadWorklets(E.ctx);
     A.init(); PR.init();
     this.bindUI();
     this.loading(true, 'Memuat project…');
@@ -26,7 +27,8 @@ const App = {
     this.syncStrips();
     if (E.ctx) updateMasterFx(E.ctx, E.master, P);
     $('#bpm').value = P.bpm;
-    $('#masterVol').value = P.master.vol;
+    $('#masterVol').value = Math.min(1.5, P.master.vol);
+    this.renderMasterPct();
     const first = P.tracks.find((t) => t.type === 'inst' && t.clips.length);
     if (first && !UI.editClip) this.openPiano(first.clips[0], first, true);
     UI.selTrack = UI.selTrack && findTrack(UI.selTrack) ? UI.selTrack : (P.tracks[0] && P.tracks[0].id);
@@ -181,7 +183,9 @@ const App = {
   updateTransportUI() {
     $('#btnPlay').textContent = T.playing ? '❚❚' : '▶';
     $('#btnPlay').classList.toggle('on', T.playing);
-    $('#btnRec').classList.toggle('rec', T.recording);
+    const dubbing = T.recording && T.recInfo && T.recInfo.dubler;
+    $('#btnRec').classList.toggle('rec', T.recording && !dubbing);
+    $('#btnDub').classList.toggle('rec', !!dubbing);
     $('#btnLoop').classList.toggle('on', P.loop.on);
     $('#btnMetro').classList.toggle('on', E.metronome);
   },
@@ -199,6 +203,7 @@ const App = {
     if (A.dirty) { A.draw(); A.dirty = false; }
     if (PR.dirty && this.activeTab() === 'piano') { PR.draw(); PR.dirty = false; }
     this.meters();
+    if (T.recording && T.recInfo && T.recInfo.dubler) DubLive.tick(INSTRUMENTS[T.recInfo.track.inst].drum);
     requestAnimationFrame(() => this.frame());
   },
   meters() {
@@ -384,14 +389,16 @@ const App = {
   },
 
   // ---------- rekam ----------
-  async toggleRecord() {
+  async toggleRecord(dub) {
     if (T.recording) {
       T.recording = false;
       const info = T.recInfo;
       this.pause();
       const blob = await Recorder.stop();
       this.updateTransportUI();
+      DubLive.stop();
       if (!blob) return;
+      if (info.dubler) return this.finishDubler(blob, info);
       this.loading(true, 'Memproses rekaman…');
       try {
         const bytes = await blob.arrayBuffer();
@@ -414,6 +421,7 @@ const App = {
       return;
     }
     await E.resume();
+    if (dub === true) return this.startDubler();
     let t = P.tracks.find((x) => x.arm) || (UI.selTrack && findTrack(UI.selTrack));
     if (!t || t.type !== 'audio') { History.push(); t = makeTrack('audio'); t.name = 'Rekaman Vokal'; t.arm = true; P.tracks.push(t); this.changed(); }
     try { await Recorder.start(); }
@@ -426,6 +434,96 @@ const App = {
     T.recInfo.lat = T.segs[0].t0 - recStartT;
     this.updateTransportUI();
     this.status('● Merekam ke "' + t.name + '"… tekan ● atau Spasi untuk berhenti');
+  },
+
+  // ---------- DUBLER: suara -> note ----------
+  async startDubler() {
+    let t = UI.selTrack && findTrack(UI.selTrack);
+    if (!t || t.type !== 'inst') {
+      History.push();
+      t = makeTrack('inst', 'piano'); t.name = 'Dubler (Piano)';
+      P.tracks.push(t); UI.selTrack = t.id;
+      await this.loadInst('piano');
+      this.changed();
+    }
+    try { await Recorder.start(); }
+    catch (e) { this.status('Mikrofon tidak bisa diakses: ' + e.message); return; }
+    DubLive.start(Recorder.stream);
+    const recStartT = E.ctx.currentTime;
+    if (T.playing) this.pause();
+    T.recording = true;
+    T.recInfo = { track: t, beat: A.snap(UI.playhead), dubler: true };
+    UI.playhead = T.recInfo.beat;
+    await this.play();
+    T.recInfo.lat = T.segs[0].t0 - recStartT;
+    this.updateTransportUI();
+    this.status('🎤 Dubler → "' + t.name + '"… nyanyi / beatbox, tekan 🎤→🎹 lagi untuk jadikan note');
+  },
+  toggleDubler() { return T.recording ? this.toggleRecord() : this.toggleRecord(true); },
+  async finishDubler(blob, info) {
+    this.loading(true, 'Dubler: mendeteksi nada…');
+    try {
+      const bytes = await blob.arrayBuffer();
+      const buf = await E.ctx.decodeAudioData(bytes.slice(0));
+      const id = uid('rec');
+      registerAudio(id, 'Dubler take ' + (Object.keys(AUDIO).filter((k) => AUDIO[k].name.startsWith('Dubler')).length + 1), buf, bytes);
+      P.fx.push(id); Panels.renderFx();
+      const lat = Math.max(0, Math.min(buf.duration, info.lat || 0));
+      const n = this.makeDublerClip(info.track, buf, lat, buf.duration - lat, P.bpm, info.beat);
+      this.status(n ? '🎤→🎹 ' + n + ' note dibuat dari suaramu! (audio aslinya ada di Sound FX)' : 'Dubler tidak menemukan nada — coba lebih keras / dekat mic, atau naikkan sensitivitas di ⚙');
+    } catch (e) { console.error(e); this.status('Dubler gagal: ' + e.message); }
+    this.loading(false);
+  },
+  // buat clip nada dari potongan audio; return jumlah note
+  makeDublerClip(track, buf, startSec, durSec, bpm, beat) {
+    const drum = INSTRUMENTS[track.inst].drum;
+    const notes = drum ? beatboxToDrums(buf, startSec, durSec, bpm) : voiceToNotes(buf, startSec, durSec, bpm);
+    if (!notes.length) return 0;
+    History.push();
+    const end = Math.max(...notes.map((x) => x.s + x.l));
+    const len = Math.max(4, Math.ceil(end / 4) * 4);
+    const c = makeInstClip(beat, len, len, notes);
+    c.name = '🎤 Dubler';
+    track.clips.push(c);
+    UI.sel = new Set([c.id]); UI.selTrack = track.id;
+    this.openPiano(c, track);
+    this.changed();
+    return notes.length;
+  },
+  async audioClipToNotes(clip, inst) {
+    const a = AUDIO[clip.buf]; if (!a) return;
+    await this.loadInst(inst);
+    History.push();
+    const t = makeTrack('inst', inst); t.name = INSTRUMENTS[inst].name + ' (dari ' + (clip.name || a.name) + ')';
+    const idx = P.tracks.findIndex((x) => x.clips.includes(clip));
+    P.tracks.splice(idx + 1, 0, t);
+    const tr = clipTimeRate(clip);
+    const n = this.makeDublerClip(t, a.buffer, clip.offset, clip.len * this.spb() * tr, P.bpm / tr, clip.start);
+    if (!n) { P.tracks.splice(P.tracks.indexOf(t), 1); this.changed(); this.status('Tidak ada nada terdeteksi di clip ini'); }
+    else this.status('🎤→🎹 ' + n + ' note dibuat dari clip audio');
+  },
+  dublerSettings(anchor) {
+    const box = $('#dubCfg');
+    if (!box.classList.contains('hidden')) { box.classList.add('hidden'); return; }
+    box.innerHTML = '';
+    const sel = (opts, val, on) => { const s = h('select', {}, ...opts.map(([v, l]) => h('option', { value: v, selected: String(v) === String(val) }, l))); s.onchange = () => on(s.value); return s; };
+    box.append(h('h4', {}, '🎤→🎹 Pengaturan Dubler'),
+      h('label', { class: 'slider' }, h('span', { class: 'sl-label' }, 'Skala'), sel(Object.entries(SCALES).map(([k, v]) => [k, v.name]), DUB.scale, (v) => (DUB.scale = v))),
+      h('label', { class: 'slider' }, h('span', { class: 'sl-label' }, 'Nada dasar'), sel(NOTE_NAMES.map((n, i) => [i, n]), DUB.root, (v) => (DUB.root = +v))),
+      h('label', { class: 'slider' }, h('span', { class: 'sl-label' }, 'Geser oktaf'), sel([[-2, '-2'], [-1, '-1'], [0, '0'], [1, '+1'], [2, '+2']], DUB.octave, (v) => (DUB.octave = +v))),
+      Slider({ label: 'Sensitivitas', min: 0, max: 1, step: 0.05, value: DUB.sens, fmt: fmtPct, onInput: (v) => (DUB.sens = v) }),
+      h('p', { class: 'hint' }, 'Pilih track instrumen dulu (mis. Piano / Biola / Drum Kit), lalu tekan 🎤→🎹 (atau D). Track Drum Kit = mode beatbox. Hasil di-quantize sesuai Snap. Clip audio yang sudah ada juga bisa: klik kanan → "Jadikan note".'),
+      h('div', { class: 'btnrow' }, h('button', { onclick: () => box.classList.add('hidden') }, 'Tutup')));
+    const r = anchor.getBoundingClientRect();
+    box.style.left = Math.min(r.left, innerWidth - 320) + 'px'; box.style.top = (r.bottom + 6) + 'px';
+    box.classList.remove('hidden');
+  },
+  renderMasterPct() {
+    const w = $('#masterPct');
+    if (!w.firstChild) {
+      w.append(PctInput(() => P.master.vol, (v) => { P.master.vol = v; $('#masterVol').value = Math.min(1.5, v); if (E.ctx) updateMasterFx(E.ctx, E.master, P); this.queueSave(); }));
+    }
+    w.querySelector('input').sync();
   },
 
   // ---------- export ----------
@@ -513,6 +611,8 @@ const App = {
     $('#btnPlay').onclick = () => this.togglePlay();
     $('#btnStop').onclick = () => this.stop();
     $('#btnRec').onclick = () => this.toggleRecord();
+    $('#btnDub').onclick = () => this.toggleDubler();
+    $('#btnDubCfg').onclick = (e) => this.dublerSettings(e.currentTarget);
     $('#btnLoop').onclick = () => { P.loop.on = !P.loop.on; this.updateTransportUI(); A.dirty = true; this.queueSave(); if (T.playing) this.reschedule(true); };
     $('#btnMetro').onclick = () => { E.metronome = !E.metronome; this.updateTransportUI(); this.reschedule(true); };
     $('#bpm').addEventListener('change', () => {
@@ -526,7 +626,7 @@ const App = {
       this.changed();
     });
     $('#snap').addEventListener('change', () => { UI.snap = parseFloat($('#snap').value); });
-    $('#masterVol').addEventListener('input', () => { P.master.vol = parseFloat($('#masterVol').value); if (E.ctx) updateMasterFx(E.ctx, E.master, P); this.queueSave(); });
+    $('#masterVol').addEventListener('input', () => { P.master.vol = parseFloat($('#masterVol').value); this.renderMasterPct(); if (E.ctx) updateMasterFx(E.ctx, E.master, P); this.queueSave(); });
     document.querySelectorAll('#tools button').forEach((b) => (b.onclick = () => this.setTool(b.dataset.tool)));
     document.querySelectorAll('#tabs button').forEach((b) => (b.onclick = () => this.showTab(b.dataset.tab)));
     $('#btnImport').onclick = () => $('#fileInput').click();
@@ -576,6 +676,7 @@ const App = {
           { label: '🎙 Track audio kosong', fn: () => this.addAudioTrack() },
           { label: '📥 Import MP3/WAV…', fn: () => $('#fileInput').click() },
           { label: '● Rekam dari mikrofon', fn: () => this.toggleRecord() },
+          { label: '🎤→🎹 Dubler: suara jadi note (D)', fn: () => this.toggleDubler() },
         ],
       };
       Menu.show(r.left, r.bottom + 2, menus[b.dataset.menu]);
@@ -650,6 +751,7 @@ const App = {
     else if (k === 't') this.setTool('mute');
     else if (k === 'l') $('#btnLoop').click();
     else if (k === 'r') this.toggleRecord();
+    else if (k === 'd') this.toggleDubler();
     else if (k === 'home' || k === 'enter') this.seek(P.loop.on ? P.loop.start : 0);
     else if (k === 'f5') { e.preventDefault(); this.showTab('piano'); }
     else if (k === 'f6') { e.preventDefault(); this.showTab('rack'); }

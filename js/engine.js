@@ -144,6 +144,46 @@ function makeIR(ctx, seconds, decay) {
   return ir;
 }
 
+// ---------- Bitcrusher (AudioWorklet, dimuat dari Blob supaya jalan juga di file://) ----------
+const CRUSHER_SRC = `
+class Crusher extends AudioWorkletProcessor {
+  static get parameterDescriptors() {
+    return [{ name: 'bits', defaultValue: 8, minValue: 1, maxValue: 16, automationRate: 'k-rate' },
+            { name: 'down', defaultValue: 4, minValue: 1, maxValue: 64, automationRate: 'k-rate' }];
+  }
+  constructor() { super(); this.hold = [0, 0]; this.cnt = [0, 0]; }
+  process(inputs, outputs, p) {
+    const inp = inputs[0], out = outputs[0];
+    if (!inp || !inp.length) return true;
+    const bits = p.bits[0], down = Math.max(1, Math.round(p.down[0]));
+    const q = Math.pow(2, bits - 1);
+    for (let ch = 0; ch < out.length; ch++) {
+      const i = inp[ch] || inp[0], o = out[ch];
+      let h = this.hold[ch] || 0, c = this.cnt[ch] || 0;
+      for (let n = 0; n < o.length; n++) {
+        if (c <= 0) { h = Math.round(i[n] * q) / q; c = down; }
+        c--; o[n] = h;
+      }
+      this.hold[ch] = h; this.cnt[ch] = c;
+    }
+    return true;
+  }
+}
+registerProcessor('crusher', Crusher);`;
+const _crusherUrl = URL.createObjectURL(new Blob([CRUSHER_SRC], { type: 'application/javascript' }));
+async function loadWorklets(ctx) {
+  if (ctx._crusherOk != null) return ctx._crusherOk;
+  try { await ctx.audioWorklet.addModule(_crusherUrl); ctx._crusherOk = true; }
+  catch (e) { console.warn('AudioWorklet tidak tersedia, bitcrusher pakai WaveShaper', e); ctx._crusherOk = false; }
+  return ctx._crusherOk;
+}
+function bitCurve(bits) {
+  const n = 4096, c = new Float32Array(n), q = Math.pow(2, bits - 1);
+  for (let i = 0; i < n; i++) { const x = (i / (n - 1)) * 2 - 1; c[i] = Math.round(x * q) / q; }
+  return c;
+}
+function defaultCrush() { return { on: false, bits: 6, down: 6, mix: 1 }; }
+
 function createStrip(ctx, track, master, live) {
   const s = {};
   s.input = ctx.createGain();
@@ -156,7 +196,15 @@ function createStrip(ctx, track, master, live) {
   s.mute = ctx.createGain();
   s.sendRev = ctx.createGain();
   s.sendDel = ctx.createGain();
-  s.input.connect(s.eqL); s.eqL.connect(s.eqM); s.eqM.connect(s.eqH); s.eqH.connect(s.filt);
+  // bitcrusher: dry/wet
+  s.crDry = ctx.createGain(); s.crWet = ctx.createGain(); s.crOut = ctx.createGain();
+  if (ctx._crusherOk) s.crusher = new AudioWorkletNode(ctx, 'crusher', { outputChannelCount: [2] });
+  else { s.crusher = ctx.createWaveShaper(); s.crusher._bits = 0; }
+  s.crWet.gain.value = 0;
+  s.input.connect(s.eqL); s.eqL.connect(s.eqM); s.eqM.connect(s.eqH);
+  s.eqH.connect(s.crDry); s.crDry.connect(s.crOut);
+  s.eqH.connect(s.crusher); s.crusher.connect(s.crWet); s.crWet.connect(s.crOut);
+  s.crOut.connect(s.filt);
   s.filt.connect(s.vol); s.vol.connect(s.pan); s.pan.connect(s.mute); s.mute.connect(master.input);
   s.mute.connect(s.sendRev); s.sendRev.connect(master.revIn);
   s.mute.connect(s.sendDel); s.sendDel.connect(master.delIn);
@@ -176,6 +224,13 @@ function applyStripStatic(ctx, s, track, anySolo, now) {
   if (!hasAuto(track, 'reverb')) set(s.sendRev.gain, track.reverb);
   if (!hasAuto(track, 'filter')) set(s.filt.frequency, 20000);
   set(s.sendDel.gain, track.delay);
+  const cr = track.crush || defaultCrush();
+  set(s.crWet.gain, cr.on ? cr.mix : 0);
+  set(s.crDry.gain, cr.on ? 1 - cr.mix : 1);
+  if (s.crusher.parameters) {
+    s.crusher.parameters.get('bits').setValueAtTime(cr.bits, t);
+    s.crusher.parameters.get('down').setValueAtTime(cr.down, t);
+  } else if (s.crusher._bits !== cr.bits) { s.crusher.curve = bitCurve(cr.bits); s.crusher._bits = cr.bits; }
   set(s.mute.gain, (track.mute || (anySolo && !track.solo)) ? 0 : 1);
 }
 
@@ -452,6 +507,7 @@ async function renderMix(proj, fromBeat, toBeat) {
   const dur = (toBeat - fromBeat) * spb + tail;
   const rate = 44100;
   const off = new OfflineAudioContext(2, Math.ceil(dur * rate), rate);
+  await loadWorklets(off);
   const master = createMaster(off, proj, false);
   const strips = {};
   for (const t of proj.tracks) strips[t.id] = createStrip(off, t, master, false);

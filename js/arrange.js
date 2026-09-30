@@ -423,6 +423,10 @@ const A = {
       items.push({ label: '⧉ Duplikat (Ctrl+D)', fn: () => App.duplicateSel() });
       items.push({ label: '📋 Copy (Ctrl+C)', fn: () => App.copySel() });
       items.push({ label: (c.muted ? '🔊 Unmute' : '🔇 Mute') + ' clip', fn: () => { History.push(); c.muted = !c.muted; App.changed(); } });
+      if (c.type === 'audio') {
+        items.push({ label: '🎤→🎹 Jadikan note melodi (Dubler → Piano)', fn: () => App.audioClipToNotes(c, 'piano') });
+        items.push({ label: '🎤→🥁 Jadikan drum (beatbox → Drum Kit)', fn: () => App.audioClipToNotes(c, 'drums') });
+      }
       if (c.type === 'audio') items.push({ label: '⇄ Reverse', fn: () => { History.push(); c.reverse = !c.reverse; App.changed(); } });
       items.push({ label: '✎ Ganti nama', fn: () => { const n = prompt('Nama clip', c.name || ''); if (n != null) { History.push(); c.name = n; App.changed(); } } });
       items.push({ sep: true });

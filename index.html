@@ -21,6 +21,8 @@
       <button id="btnStop" title="Stop (kembali ke awal)">■</button>
       <button id="btnPlay" title="Play / Pause (Spasi)">▶</button>
       <button id="btnRec" title="Rekam audio dari mikrofon (R)">●</button>
+      <button id="btnDub" class="dub" title="DUBLER: nyanyi / ngomong / beatbox ke mic → jadi NOTE di track instrumen terpilih (D)">🎤→🎹</button>
+      <button id="btnDubCfg" title="Pengaturan Dubler (skala, oktaf, sensitivitas)">⚙</button>
       <button id="btnLoop" class="toggle" title="Loop region (L)">⟲</button>
       <button id="btnMetro" class="toggle" title="Metronom">♩</button>
     </div>
@@ -46,7 +48,7 @@
       <button data-tool="erase" title="Hapus (E)">⌫</button>
       <button data-tool="mute" title="Mute clip (T)">🔇</button>
     </div>
-    <div class="field master"><label>Master</label><input id="masterVol" type="range" min="0" max="1.25" step="0.01" value="0.9"><canvas id="masterMeter" width="80" height="14"></canvas></div>
+    <div class="field master"><label>Master</label><input id="masterVol" type="range" min="0" max="1.5" step="0.01" value="0.9"><span id="masterPct"></span><canvas id="masterMeter" width="80" height="14"></canvas></div>
     <div class="status" id="status">Siap</div>
   </header>
 
@@ -131,12 +133,15 @@
 </div>
 
 <div id="ctxMenu" class="ctx-menu hidden"></div>
+<div id="dubHud" class="hidden"><div class="dub-title">🎤 DUBLER merekam…</div><div id="dubNote">—</div><div class="dub-bar"><div id="dubLevel"></div></div><div class="hint">Nyanyi / ngomong nada, atau beatbox (bum = kick, ka = snare, tss = hi-hat) kalau track-nya Drum Kit. Tekan 🎤→🎹 / D / Spasi untuk selesai.</div></div>
+<div id="dubCfg" class="popover hidden"></div>
 <div id="dropOverlay" class="hidden">Lepaskan file audio untuk dijadikan clip / sound effect</div>
 <div id="loading" class="hidden"><div class="spinner"></div><span id="loadingText">Memuat sampel…</span></div>
 
 <script src="js/instruments.js"></script>
 <script src="js/engine.js"></script>
 <script src="js/project.js"></script>
+<script src="js/dubler.js"></script>
 <script src="js/arrange.js"></script>
 <script src="js/pianoroll.js"></script>
 <script src="js/panels.js"></script>

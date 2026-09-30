@@ -81,6 +81,27 @@ function Slider({ label, min, max, step, value, fmt, onInput, wide }) {
   return h('label', { class: 'slider' + (wide ? ' wide' : '') }, h('span', { class: 'sl-label' }, label), inp, out);
 }
 
+// Input angka volume 0% .. 1000% (bisa diketik / scroll; shift+scroll = langkah 50%)
+function PctInput(get, set, max = 1000) {
+  const inp = h('input', { type: 'number', class: 'pct', min: 0, max, step: 1, value: Math.round(get() * 100), title: 'Volume 0–' + max + '% (ketik angka, atau scroll)' });
+  const apply = (pct, final) => {
+    pct = Math.max(0, Math.min(max, pct || 0));
+    inp.value = Math.round(pct);
+    set(pct / 100);
+    if (final) App.changed();
+  };
+  inp.addEventListener('focus', () => History.push());
+  inp.addEventListener('change', () => apply(parseFloat(inp.value), true));
+  inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') inp.blur(); e.stopPropagation(); });
+  inp.addEventListener('wheel', (e) => {
+    e.preventDefault(); e.stopPropagation();
+    if (document.activeElement !== inp) History.push();
+    apply(parseFloat(inp.value) + (e.deltaY < 0 ? 1 : -1) * (e.shiftKey ? 50 : 5));
+    clearTimeout(inp._t); inp._t = setTimeout(() => App.changed(), 400);
+  }, { passive: false });
+  inp.sync = () => { if (document.activeElement !== inp) inp.value = Math.round(get() * 100); };
+  return h('span', { class: 'pct-wrap' }, inp, '%');
+}
 const fmtPct = (v) => Math.round(v * 100) + '%';
 const fmtPan = (v) => { const p = Math.round(v * 100); return p === 0 ? 'C' : p < 0 ? 'L' + -p : 'R' + p; };
 const fmtDb = (v) => (v > 0 ? '+' : '') + v.toFixed(1) + 'dB';
@@ -111,12 +132,13 @@ const Panels = {
         h('option', { value: '' }, '〰 Auto…'),
         ...AUTO_ORDER.filter((k) => !(t.type === 'audio' && false)).map((k) => h('option', { value: k, selected: t.showAuto === k }, (t.auto[k].length ? '● ' : '') + AUTO_PARAMS[k].label)));
       autoSel.addEventListener('change', () => { t.showAuto = autoSel.value || null; App.changed(true); });
-      const vol = h('input', { type: 'range', class: 'tvol', min: 0, max: 1.25, step: 0.01, value: t.vol, title: 'Volume track' });
+      const vol = h('input', { type: 'range', class: 'tvol', min: 0, max: 1.5, step: 0.01, value: Math.min(1.5, t.vol), title: 'Volume track (ketik di kotak % untuk sampai 1000%)' });
+      const pct = PctInput(() => t.vol, (v) => { t.vol = v; vol.value = Math.min(1.5, v); App.mixChanged(); });
       vol.addEventListener('pointerdown', () => History.push());
-      vol.addEventListener('input', () => { t.vol = parseFloat(vol.value); App.mixChanged(); });
+      vol.addEventListener('input', () => { t.vol = parseFloat(vol.value); pct.firstChild.sync(); App.mixChanged(); });
       vol.addEventListener('change', () => App.changed(true));
       const meter = h('div', { class: 'tmeter' }, h('div', { class: 'tmeter-fill', 'data-meter': t.id }));
-      head.append(colorBar, h('div', { class: 'tbody' }, h('div', { class: 'trow1' }, name, btns), h('div', { class: 'trow2' }, autoSel, vol), meter));
+      head.append(colorBar, h('div', { class: 'tbody' }, h('div', { class: 'trow1' }, name, btns), h('div', { class: 'trow2' }, autoSel, vol, pct), meter));
       box.append(head);
       if (t.showAuto) {
         const ah = h('div', { class: 'thead-auto', style: `height:${AUTO_H}px` },
@@ -244,13 +266,22 @@ const Panels = {
       Knob({ label: 'EQ High', min: -15, max: 15, value: t.eq.high, def: 0, fmt: fmtDb, onInput: (v) => { t.eq.high = v; App.mixChanged(); }, color: '#ffb347', size: 28 }),
     );
     el.append(knobs);
-    const fader = h('input', { type: 'range', class: 'vfader', min: 0, max: 1.25, step: 0.01, value: t.vol });
+    // bitcrusher
+    const cr = t.crush;
+    const crBtn = h('button', { class: 'tb' + (cr.on ? ' crush-on' : ''), title: 'Bitcrusher on/off' }, cr.on ? '👾 BITCRUSH ON' : '👾 Bitcrush off');
+    crBtn.addEventListener('click', () => { History.push(); cr.on = !cr.on; crBtn.className = 'tb' + (cr.on ? ' crush-on' : ''); crBtn.textContent = cr.on ? '👾 BITCRUSH ON' : '👾 Bitcrush off'; App.mixChanged(); App.queueSave(); });
+    el.append(h('div', { class: 'crush-row' }, crBtn, h('div', { class: 'mknobs' },
+      Knob({ label: 'Bits', min: 1, max: 16, value: cr.bits, def: 6, fmt: (v) => Math.round(v) + ' bit', onInput: (v) => { cr.bits = Math.round(v); App.mixChanged(); }, color: '#c94cff', size: 26 }),
+      Knob({ label: 'Downsmp', min: 1, max: 40, value: cr.down, def: 6, fmt: (v) => Math.round(v) + 'x', onInput: (v) => { cr.down = Math.round(v); App.mixChanged(); }, color: '#c94cff', size: 26 }),
+      Knob({ label: 'Mix', min: 0, max: 1, value: cr.mix, def: 1, fmt: fmtPct, onInput: (v) => { cr.mix = v; App.mixChanged(); }, color: '#c94cff', size: 26 }))));
+    const fader = h('input', { type: 'range', class: 'vfader', min: 0, max: 1.5, step: 0.01, value: Math.min(1.5, t.vol) });
     const fv = h('div', { class: 'mval' }, fmtVol(t.vol) + autoNote('volume'));
+    const fpct = PctInput(() => t.vol, (v) => { t.vol = v; fader.value = Math.min(1.5, v); fv.textContent = fmtVol(v); App.mixChanged(); });
     fader.addEventListener('pointerdown', () => History.push());
-    fader.addEventListener('input', () => { t.vol = parseFloat(fader.value); fv.textContent = fmtVol(t.vol); App.mixChanged(); });
+    fader.addEventListener('input', () => { t.vol = parseFloat(fader.value); fv.textContent = fmtVol(t.vol); fpct.firstChild.sync(); App.mixChanged(); });
     fader.addEventListener('change', () => App.changed(true));
     const meter = h('div', { class: 'vmeter' }, h('div', { class: 'vmeter-fill', 'data-meter': t.id }));
-    el.append(h('div', { class: 'mfader' }, fader, meter), fv);
+    el.append(h('div', { class: 'mfader' }, fader, meter), fv, fpct);
     el.append(h('div', { class: 'mbtns' },
       h('button', { class: 'tb' + (t.mute ? ' on-m' : ''), onclick: (e) => { History.push(); t.mute = !t.mute; e.target.classList.toggle('on-m', t.mute); App.mixChanged(); App.renderHeads(); App.changed(true); } }, 'M'),
       h('button', { class: 'tb' + (t.solo ? ' on-s' : ''), onclick: (e) => { History.push(); t.solo = !t.solo; e.target.classList.toggle('on-s', t.solo); App.mixChanged(); App.renderHeads(); App.changed(true); } }, 'S')));
@@ -273,12 +304,13 @@ const Panels = {
     // reverb IR dibangun ulang saat knob dilepas
     knobs.addEventListener('pointerup', () => upd());
     el.append(knobs);
-    const fader = h('input', { type: 'range', class: 'vfader', min: 0, max: 1.25, step: 0.01, value: M.vol });
+    const fader = h('input', { type: 'range', class: 'vfader', min: 0, max: 1.5, step: 0.01, value: Math.min(1.5, M.vol) });
     const fv = h('div', { class: 'mval' }, fmtVol(M.vol));
-    fader.addEventListener('input', () => { M.vol = parseFloat(fader.value); fv.textContent = fmtVol(M.vol); $('#masterVol').value = M.vol; upd(); });
+    const mp = PctInput(() => M.vol, (v) => { M.vol = v; fader.value = Math.min(1.5, v); fv.textContent = fmtVol(v); $('#masterVol').value = Math.min(1.5, v); App.renderMasterPct(); upd(); });
+    fader.addEventListener('input', () => { M.vol = parseFloat(fader.value); fv.textContent = fmtVol(M.vol); mp.firstChild.sync(); $('#masterVol').value = M.vol; App.renderMasterPct(); upd(); });
     fader.addEventListener('change', () => App.changed(true));
     const meter = h('div', { class: 'vmeter' }, h('div', { class: 'vmeter-fill', 'data-meter': 'master' }));
-    el.append(h('div', { class: 'mfader' }, fader, meter), fv);
+    el.append(h('div', { class: 'mfader' }, fader, meter), fv, mp);
     return el;
   },
 
@@ -297,7 +329,8 @@ const Panels = {
       const nameIn = h('input', { type: 'text', value: c.name || '', placeholder: 'Nama clip' });
       nameIn.addEventListener('change', () => { History.push(); c.name = nameIn.value; App.changed(true); });
       col1.append(h('label', { class: 'slider' }, h('span', { class: 'sl-label' }, 'Nama'), nameIn));
-      col1.append(Slider({ label: 'Gain', min: 0, max: 2, step: 0.01, value: c.gain, fmt: fmtVol, onInput: (v) => { c.gain = v; App.softChanged(); } }));
+      col1.append(Slider({ label: 'Gain', min: 0, max: 2, step: 0.01, value: Math.min(2, c.gain), fmt: fmtVol, onInput: (v) => { c.gain = v; App.softChanged(); } }));
+      col1.append(h('label', { class: 'slider' }, h('span', { class: 'sl-label' }, 'Gain custom'), PctInput(() => c.gain, (v) => { c.gain = v; App.softChanged(); }), h('span', { class: 'hint' }, ' 0–1000%'))); 
       if (c.type === 'audio') {
         const keepLen = (fn) => (v) => { const r0 = clipTimeRate(c); fn(v); const r1 = clipTimeRate(c); c.len = Math.min(c.len * r0 / r1, audioFullLen(c)); App.softChanged(); };
         col1.append(Slider({ label: 'Pitch', min: -24, max: 24, step: 1, value: c.pitch, fmt: (v) => (v > 0 ? '+' : '') + v + ' semitone', onInput: keepLen((v) => { c.pitch = v; }) }));
@@ -337,10 +370,18 @@ const Panels = {
         s.addEventListener('change', async () => { History.push(); const old = INSTRUMENTS[t.inst]; t.inst = s.value; if (t.name === old.name) t.name = INSTRUMENTS[s.value].name; t.color = INSTRUMENTS[s.value].color; await App.loadInst(s.value); App.changed(); });
         col2.append(h('label', { class: 'slider' }, h('span', { class: 'sl-label' }, 'Instrumen'), s));
       }
-      col2.append(Slider({ label: 'Volume', min: 0, max: 1.25, step: 0.01, value: t.vol, fmt: fmtVol, onInput: (v) => { t.vol = v; App.mixChanged(); } }));
+      col2.append(Slider({ label: 'Volume', min: 0, max: 1.5, step: 0.01, value: Math.min(1.5, t.vol), fmt: fmtVol, onInput: (v) => { t.vol = v; App.mixChanged(); } }));
+      col2.append(h('label', { class: 'slider' }, h('span', { class: 'sl-label' }, 'Volume custom'), PctInput(() => t.vol, (v) => { t.vol = v; App.mixChanged(); }), h('span', { class: 'hint' }, ' 0–1000% (ketik / scroll)')));
       col2.append(Slider({ label: 'Pan', min: -1, max: 1, step: 0.01, value: t.pan, fmt: fmtPan, onInput: (v) => { t.pan = v; App.mixChanged(); } }));
       col2.append(Slider({ label: 'Reverb', min: 0, max: 1, step: 0.01, value: t.reverb, fmt: fmtPct, onInput: (v) => { t.reverb = v; App.mixChanged(); } }));
       col2.append(Slider({ label: 'Delay', min: 0, max: 1, step: 0.01, value: t.delay, fmt: fmtPct, onInput: (v) => { t.delay = v; App.mixChanged(); } }));
+      col2.append(h('h4', {}, '👾 Bitcrusher'));
+      const cre = h('input', { type: 'checkbox', checked: t.crush.on });
+      cre.addEventListener('change', () => { History.push(); t.crush.on = cre.checked; App.mixChanged(); App.changed(true); });
+      col2.append(h('label', { class: 'check' }, cre, ' Aktifkan bitcrusher (suara lo-fi / 8-bit)'));
+      col2.append(Slider({ label: 'Bit depth', min: 1, max: 16, step: 1, value: t.crush.bits, fmt: (v) => v + ' bit', onInput: (v) => { t.crush.bits = v; App.mixChanged(); } }));
+      col2.append(Slider({ label: 'Downsample', min: 1, max: 40, step: 1, value: t.crush.down, fmt: (v) => v + 'x (' + Math.round((E.ctx ? E.ctx.sampleRate : 48000) / v) + ' Hz)', onInput: (v) => { t.crush.down = v; App.mixChanged(); } }));
+      col2.append(Slider({ label: 'Mix', min: 0, max: 1, step: 0.01, value: t.crush.mix, fmt: fmtPct, onInput: (v) => { t.crush.mix = v; App.mixChanged(); } }));
       col2.append(Slider({ label: 'Pitch track', min: -12, max: 12, step: 1, value: t.transpose || 0, fmt: (v) => (v > 0 ? '+' : '') + v + ' st', onInput: (v) => { t.transpose = v; App.softChanged(); } }));
       col2.append(h('h4', {}, '〰 Automation / Keyframe'));
       col2.append(h('p', { class: 'hint' }, 'Buka lane, lalu klik di lane untuk menambah keyframe. Seret titik bulat kecil di tengah segmen untuk membentuk kurva kustom. Klik kanan titik untuk jenis kurva (tunggal, S, hold, tangga, pulsa).'));
