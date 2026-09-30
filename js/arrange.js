@@ -6,7 +6,8 @@
    ========================================================= */
 'use strict';
 
-const RULER_H = 30, TRACK_H = 72, AUTO_H = 78, HEAD_H = 15;
+const RULER_H = 30, HEAD_H = 15;
+let TRACK_H = 72, AUTO_H = 78;
 
 const UI = {
   tool: 'pointer',
@@ -109,7 +110,7 @@ const A = {
               else if (Math.abs(x - fx1) < 7 && x1 - x < (x1 - x0) / 2) zone = 'fadeOut';
             }
             if (zone === 'move') {
-              const edge = Math.min(7, (x1 - x0) / 4);
+              const edge = UI.mobile ? Math.min(20, (x1 - x0) / 3) : Math.min(7, (x1 - x0) / 4);
               if (x - x0 < edge) zone = 'left';
               else if (x1 - x < edge) zone = 'right';
             }
@@ -156,6 +157,24 @@ const A = {
     const { x, y } = this.pos(e);
     const h = this.hit(x, y);
     const tool = UI.tool;
+    // ----- sentuhan (HP): geser timeline, cubit untuk zoom, tap untuk pilih (ala CapCut) -----
+    if (e.pointerType === 'touch') {
+      this.touches = this.touches || new Map();
+      this.touches.set(e.pointerId, { x, y });
+      if (this.touches.size === 2) {
+        const [a, b] = [...this.touches.values()];
+        if (this.drag && this.drag.kind === 'clip' && this.drag.moved) History.doUndo();
+        this.marquee = null;
+        this.drag = { kind: 'pinch', d0: Math.hypot(a.x - b.x, a.y - b.y) || 1, z0: UI.zoom };
+        return;
+      }
+      const touchPan = tool === 'pointer' || (tool === 'draw' && !(h.track && h.track.type === 'inst'));
+      if (h.area !== 'auto' && touchPan && !(h.area === 'clip' && UI.sel.has(h.clip.id))) {
+        if (h.track) { UI.selTrack = h.track.id; App.renderHeads(); }
+        this.drag = { kind: 'pan', x0: x, y0: y, p0: UI.playhead, sx0: UI.scrollX, sy0: UI.scrollY, tap: h.area === 'clip' ? h : null, moved: false };
+        return;
+      }
+    }
 
     if (h.track) { UI.selTrack = h.track.id; App.renderHeads(); }
 
@@ -244,9 +263,27 @@ const A = {
   },
 
   onMove(e) {
+    if (this.touches && this.touches.has(e.pointerId)) this.touches.set(e.pointerId, this.pos(e));
     const d = this.drag;
     if (!d) return;
     const { x, y } = this.pos(e);
+    if (d.kind === 'pinch') {
+      if (this.touches.size < 2) return;
+      const [a, b] = [...this.touches.values()];
+      UI.zoom = Math.max(4, Math.min(400, d.z0 * Math.hypot(a.x - b.x, a.y - b.y) / d.d0));
+      this.dirty = true; return;
+    }
+    if (d.kind === 'pan') {
+      if (!d.moved && Math.hypot(x - d.x0, y - d.y0) < 8) return;
+      if (!d.moved && T.playing) App.pause();
+      d.moved = true;
+      if (UI.mobile) UI.playhead = Math.max(0, d.p0 - (x - d.x0) / UI.zoom);
+      else UI.scrollX = Math.max(0, d.sx0 - (x - d.x0));
+      const maxY = Math.max(0, this.contentH + 80 - this.h);
+      UI.scrollY = Math.max(0, Math.min(maxY, d.sy0 - (y - d.y0)));
+      App.syncHeadScroll();
+      this.dirty = true; PR.dirty = true; return;
+    }
     if (d.kind === 'clip') {
       const dxB = (x - d.x0) / UI.zoom;
       if (!d.moved && Math.abs(x - d.x0) < 3 && Math.abs(y - d.y0) < 3) return;
@@ -337,9 +374,18 @@ const A = {
     }
   },
   onUp(e) {
+    if (this.touches) this.touches.delete(e.pointerId);
     const d = this.drag;
     if (!d) return;
+    if (d.kind === 'pinch') { if (!this.touches || this.touches.size === 0) this.drag = null; return; }
     this.drag = null;
+    if (d.kind === 'pan') {
+      if (!d.moved) {
+        if (d.tap) { UI.sel = new Set([d.tap.clip.id]); App.selectClip(d.tap.clip, d.tap.track); }
+        else { UI.sel.clear(); App.selectClip(null); }
+      }
+      this.dirty = true; return;
+    }
     if (d.kind === 'marquee') {
       if (!d.moved) { UI.sel.clear(); App.seek(Math.max(0, this.snap(d.beat))); App.selectClip(null); }
       this.marquee = null;
@@ -541,9 +587,12 @@ const A = {
       g.fillStyle = '#6f7a85'; g.font = '14px sans-serif';
       g.fillText('Klik instrumen di Browser (kiri) untuk menambah track, atau seret file MP3/WAV ke sini.', 20, 40);
     }
+    // area sebelum awal lagu (mode HP: playhead di tengah)
+    const x0 = this.xOf(0);
+    if (x0 > 0) { g.fillStyle = 'rgba(0,0,0,0.45)'; g.fillRect(0, 0, x0, H); }
     // playhead
     const px = Math.round(this.xOf(UI.playhead)) + 0.5;
-    g.strokeStyle = '#7dff9b'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(px, 0); g.lineTo(px, H); g.stroke(); g.lineWidth = 1;
+    g.strokeStyle = UI.mobile ? '#ffffff' : '#7dff9b'; g.lineWidth = UI.mobile ? 2 : 1.5; g.beginPath(); g.moveTo(px, 0); g.lineTo(px, H); g.stroke(); g.lineWidth = 1;
     this.drawRuler();
   },
 
@@ -631,6 +680,11 @@ const A = {
     g.restore();
     roundRect(g, x0 + 0.5, y + 0.5, Math.max(2, w - 1), h - 1, 4);
     g.strokeStyle = sel ? '#ffffff' : hexA(col, 0.9); g.lineWidth = sel ? 2 : 1; g.stroke(); g.lineWidth = 1;
+    if (sel && UI.mobile) { // gagang trim putih ala CapCut
+      g.fillStyle = '#fff';
+      roundRect(g, x0 - 2, y, 10, h, 3); g.fill(); roundRect(g, x1 - 8, y, 10, h, 3); g.fill();
+      g.fillStyle = '#333'; g.fillRect(x0 + 2, y + h / 2 - 6, 2, 12); g.fillRect(x1 - 4, y + h / 2 - 6, 2, 12);
+    }
   },
 
   drawAuto(g, r) {

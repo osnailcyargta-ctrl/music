@@ -397,7 +397,7 @@ function scheduleRange(ctx, proj, strips, b0, b1, t0, store) {
             const tl = c.start + pos - c.offset;
             if (tl < b0 - 1e-6 || tl >= b1) continue;
             const endBeat = Math.min(tl + n.l, cEnd);
-            const pick = pickSample(def, def.drum ? n.p : n.p + (tr.transpose || 0));
+            const pick = pickSample(def, def.drum ? n.p : n.p + (tr.transpose || 0), n.v);
             if (!pick || !pick.buffer) continue;
             const when = tAt(tl);
             const src = ctx.createBufferSource();
@@ -484,7 +484,7 @@ function previewNote(track, p, vel = 0.8, dur = 0.45) {
   const def = INSTRUMENTS[track.inst];
   const s = E.strips[track.id];
   if (!def.loaded || !s) return;
-  const pick = pickSample(def, def.drum ? p : p + (track.transpose || 0));
+  const pick = pickSample(def, def.drum ? p : p + (track.transpose || 0), vel);
   if (!pick) return;
   const ctx = E.ctx, now = ctx.currentTime;
   const src = ctx.createBufferSource(); src.buffer = pick.buffer; src.playbackRate.value = pick.rate;
@@ -535,8 +535,9 @@ function encodeWav(buffer) {
 // ---------- Rekam mikrofon ----------
 const Recorder = {
   stream: null, rec: null, chunks: [],
-  async start() {
-    this.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+  async start(voice) {
+    // voice (Dubler): echo cancellation ON supaya suara instrumen dari speaker tidak ikut terdeteksi
+    this.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: !!voice, noiseSuppression: false, autoGainControl: false } });
     this.chunks = [];
     this.rec = new MediaRecorder(this.stream);
     this.rec.ondataavailable = (e) => { if (e.data.size) this.chunks.push(e.data); };

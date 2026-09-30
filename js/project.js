@@ -211,16 +211,17 @@ function demoProject() {
   P.bpm = 100;
   P.loop = { on: false, start: 0, end: 32 };
 
-  // Drum
-  const dr = makeTrack('inst', 'drums');
+  // Drum (kit pro akustik asli): 0 kick 1 snare 4 hat tutup 5 hat buka 7/8/9 tom 10 crash
+  const dr = makeTrack('inst', 'drums-pro');
   const dn = [];
   const add = (p, s, l = 0.25, v = 0.9) => dn.push({ p, s, l, v });
   for (let b = 0; b < 8; b += 4) {
-    add(0, b); add(0, b + 2.5, 0.25, 0.8); add(0, b + 3.75, 0.25, 0.6);
-    add(2, b + 1); add(2, b + 3);
-    for (let h = 0; h < 4; h += 0.5) add(4, b + h, 0.25, h % 1 ? 0.45 : 0.7);
+    add(0, b); add(0, b + 2.5, 0.25, 0.75); add(0, b + 3.75, 0.25, 0.5);
+    add(1, b + 1); add(1, b + 3);
+    for (let h = 0; h < 4; h += 0.5) add(4, b + h, 0.25, h % 1 ? 0.4 : 0.7);
   }
-  add(5, 7.5, 0.5, 0.6); add(7, 7.5, 0.25, 0.7); add(8, 7.75, 0.25, 0.8);
+  add(5, 7.5, 0.5, 0.6); add(7, 7.25, 0.25, 0.8); add(8, 7.5, 0.25, 0.8); add(9, 7.75, 0.25, 0.9);
+  add(10, 0, 0.25, 0.6);
   dr.clips.push(makeInstClip(4, 28, 8, dn));
   dr.vol = 0.95; dr.reverb = 0.08;
 

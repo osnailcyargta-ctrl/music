@@ -217,3 +217,97 @@ button.crush-on { background: #c94cff; color: #fff; }
 }
 .pct::-webkit-outer-spin-button, .pct::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .pct { -moz-appearance: textfield; appearance: textfield; }
+
+/* =========================================================
+   RESPONSIF
+   ========================================================= */
+.m-only, .c-only, .m-sheet-close { display: none; }
+#arr, #ruler, #pr, .knob, #mViz { touch-action: none; }
+html, body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
+#dubHud .dub-sub { color: var(--dim); font-size: 12px; margin-top: -4px; }
+.dub-bar { position: relative; }
+#dubGate { position: absolute; top: 0; bottom: 0; width: 2px; background: #ff4b4b; }
+#dubStop { margin-top: 8px; background: #1f9d55; color: #fff; border-color: #146c3a; padding: 5px 18px; font-weight: 700; }
+.kf-add { background: #3a2f55; }
+
+/* ---------- landscape HP / layar kecil: desktop ringkas ---------- */
+body.compact #topbar { flex-wrap: nowrap; overflow-x: auto; gap: 6px; padding: 3px 6px; min-height: 40px; }
+body.compact #topbar > * { flex-shrink: 0; }
+body.compact .brand { display: none; }
+body.compact .status { display: none; }
+body.compact .c-only { display: block; }
+body.compact #mBrowserBtn { position: fixed; left: 6px; bottom: 6px; z-index: 30; background: var(--accent); color: #111; }
+body.compact #browser { position: fixed; left: 0; top: 40px; bottom: 0; z-index: 40; width: 250px; transform: translateX(-100%); transition: transform .2s; box-shadow: 4px 0 20px rgba(0,0,0,.5); }
+body.compact.browser-open #browser { transform: none; }
+body.compact #trackHeadsWrap { width: 150px; }
+body.compact .tauto { max-width: 60px; }
+body.compact #dock { height: 42vh; }
+body.compact .pr-toolbar .hint, body.compact .rack .hint { display: none; }
+
+/* ---------- portrait HP: layout ala CapCut ---------- */
+body.mobile { font-size: 13px; }
+body.mobile .m-only { display: flex; }
+body.mobile #topbar, body.mobile #dockResize, body.mobile #playlist > .panel-title { display: none; }
+body.mobile #app { height: calc(100dvh - 68px - env(safe-area-inset-bottom)); }
+body.mobile #mTop { height: 48px; align-items: center; gap: 8px; padding: 0 10px; background: #0d0f11; flex-shrink: 0; padding-top: env(safe-area-inset-top); }
+.m-icon { background: transparent; border: 0; font-size: 20px; padding: 4px 8px; color: #e8edf1; }
+.m-title { flex: 1; font-weight: 700; font-size: 15px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.m-bpm { color: var(--dim); font-size: 11px; display: flex; align-items: center; gap: 4px; }
+.m-bpm input { width: 48px; font-size: 14px; text-align: center; color: var(--accent); }
+.m-export { background: #fff; color: #111; font-weight: 700; border-radius: 16px; padding: 6px 16px; border: 0; }
+body.mobile #mPreview { height: 24vh; min-height: 130px; position: relative; background: #000; flex-shrink: 0; }
+#mViz { width: 100%; height: 100%; display: block; }
+.m-now { position: absolute; right: 12px; bottom: 10px; text-align: right; pointer-events: none; text-shadow: 0 2px 6px #000; }
+#mNowInst { font-size: 13px; color: #fff; font-weight: 600; }
+#mNowBig { font-family: monospace; font-size: 22px; color: var(--accent2); }
+body.mobile #mCtrl { height: 50px; align-items: center; justify-content: space-between; padding: 0 12px; background: #15191d; flex-shrink: 0; position: relative; border-bottom: 1px solid #000; }
+#mTime { font-family: monospace; font-size: 13px; color: #cfd6dc; min-width: 90px; }
+.m-play { position: absolute; left: 50%; transform: translateX(-50%); width: 44px; height: 44px; border-radius: 50%; font-size: 18px; background: #fff; color: #111; border: 0; }
+.m-ctrl-r { display: flex; }
+body.mobile #main { flex: 1; min-height: 0; }
+body.mobile #browser { position: fixed; left: 0; right: 0; bottom: 0; height: 68vh; width: auto; z-index: 65; border-radius: 16px 16px 0 0; transform: translateY(105%); transition: transform .22s; box-shadow: 0 -10px 30px rgba(0,0,0,.6); padding-bottom: env(safe-area-inset-bottom); }
+body.mobile.m-browser-open #browser { transform: none; }
+body.mobile #browser .panel-title::before { content: ''; display: block; width: 40px; height: 4px; background: #555; border-radius: 2px; margin: 0 auto 0 0; }
+body.mobile .bitem { padding: 8px 6px; }
+body.mobile .bicon { width: 34px; height: 34px; font-size: 18px; }
+body.mobile .bplay { padding: 4px 10px; font-size: 13px; }
+body.mobile #trackHeadsWrap { width: 82px; }
+body.mobile .thead .trow2, body.mobile .thead-auto .hint { display: none; }
+body.mobile .tbody { padding: 3px 4px; gap: 2px; }
+body.mobile .trow1 { flex-direction: column; align-items: stretch; }
+body.mobile .tname { font-size: 11px; }
+body.mobile .tb { height: 22px; min-width: 24px; }
+body.mobile .thead-auto { padding: 4px; font-size: 11px; }
+body.mobile #mTools { position: fixed; left: 0; right: 0; bottom: 0; height: calc(68px + env(safe-area-inset-bottom)); padding-bottom: env(safe-area-inset-bottom); background: #0d0f11; border-top: 1px solid #22282d; overflow-x: auto; overflow-y: hidden; gap: 2px; z-index: 50; scrollbar-width: none; }
+body.mobile #mTools::-webkit-scrollbar { display: none; }
+.mt { flex: 0 0 auto; width: 70px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; background: transparent; border: 0; color: #dfe5ea; border-radius: 8px; padding: 4px 2px; }
+.mt:active { background: #262c32; }
+.mt.on { color: var(--accent); }
+.mt-i { font-size: 21px; line-height: 1; }
+.mt-l { font-size: 10.5px; white-space: nowrap; }
+/* dock (piano roll / mixer / step seq / efek) = bottom sheet */
+body.mobile #dock { position: fixed; left: 0; right: 0; bottom: 0; height: 64vh; z-index: 60; border-radius: 14px 14px 0 0; overflow: hidden; transform: translateY(105%); transition: transform .22s; box-shadow: 0 -10px 30px rgba(0,0,0,.6); padding-bottom: env(safe-area-inset-bottom); }
+body.mobile.m-dock-open #dock { transform: none; }
+body.mobile .m-sheet-close { display: block; margin-right: 4px; background: #444; }
+body.mobile .tabs { overflow-x: auto; flex-wrap: nowrap; padding-top: 6px; }
+body.mobile .tabs button { flex-shrink: 0; padding: 7px 10px; }
+body.mobile .tab-info { display: none; }
+body.mobile .pr-toolbar { gap: 6px; padding: 4px 6px; }
+body.mobile .pr-toolbar .hint { display: none; }
+body.mobile .pr-toolbar button { padding: 5px 10px; }
+body.mobile .insp-col { min-width: 100%; }
+body.mobile .slider input[type=range] { height: 28px; }
+body.mobile .step { width: 30px; height: 32px; }
+body.mobile .rack-lbl { width: 70px; }
+#mSheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 75; background: #1f2429; border-radius: 16px 16px 0 0; padding: 10px 14px calc(16px + env(safe-area-inset-bottom)); max-height: 60vh; overflow-y: auto; box-shadow: 0 -10px 30px rgba(0,0,0,.6); }
+.m-sheet-head { display: flex; align-items: center; justify-content: space-between; font-weight: 700; font-size: 15px; margin-bottom: 8px; }
+.m-sheet-head button { background: var(--accent); color: #111; border: 0; border-radius: 50%; width: 34px; height: 34px; font-size: 16px; }
+#mSheet .slider.wide input[type=range] { height: 32px; }
+#mSheet .btnrow button { padding: 7px 12px; }
+#mSheet .auto-row { flex-wrap: wrap; padding: 6px 0; border-bottom: 1px solid #2a3137; }
+#mBackdrop { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 55; }
+body.mobile #dubHud { top: 54px; width: 92vw; }
+body.mobile #dubCfg { left: 4vw !important; width: 92vw; top: auto !important; bottom: 80px; max-height: 70vh; overflow-y: auto; z-index: 96; }
+body.mobile .ctx-menu .item { padding: 11px 16px; font-size: 14px; }
+body.mobile #status { display: none; }
+body.mobile #loading { font-size: 14px; }

@@ -72,9 +72,11 @@ const PR = {
     const { clip: c, track: t } = f;
     const { x, y } = this.pos(e);
     this.cv.setPointerCapture(e.pointerId);
-    // keyboard kiri: preview
+    const touch = e.pointerType === 'touch';
+    // keyboard kiri: preview (sentuh + seret = scroll naik/turun)
     if (x < this.KEY_W && y > this.RULER && y < this.RULER + this.gridH()) {
       const p = this.pitchOfRow(t, this.rowAt(t, y));
+      if (touch) { this.drag = { kind: 'pan', x0: x, y0: y, sx: this.scrollX, sy: this.scrollY, p, moved: false }; return; }
       if (p >= 0) previewNote(t, p, 0.85);
       return;
     }
@@ -86,7 +88,10 @@ const PR = {
       return;
     }
     if (y < this.RULER) { // ruler: seret penanda oranye = panjang pola
-      if (Math.abs(x - this.xOf(c.patLen)) > 10) return;
+      if (Math.abs(x - this.xOf(c.patLen)) > (touch ? 18 : 10)) {
+        if (touch) this.drag = { kind: 'pan', x0: x, y0: y, sx: this.scrollX, sy: this.scrollY, moved: false };
+        return;
+      }
       History.push();
       this.drag = { kind: 'patlen' };
       c.patLen = Math.max(1, Math.round(this.beatOf(x)));
@@ -105,6 +110,7 @@ const PR = {
       return;
     }
     History.push();
+    if (hit && touch) this.tapNote = hit.n;
     if (hit) {
       if (e.shiftKey) { this.sel.has(hit.n) ? this.sel.delete(hit.n) : this.sel.add(hit.n); }
       else if (!this.sel.has(hit.n)) { this.sel.clear(); this.sel.add(hit.n); }
@@ -150,6 +156,16 @@ const PR = {
     const { clip: c, track: t } = f;
     const { x, y } = this.pos(e);
     const d = this.drag;
+    if (d && d.kind === 'pan') {
+      if (Math.hypot(x - d.x0, y - d.y0) > 6) d.moved = true;
+      if (d.moved) {
+        const max = Math.max(0, this.rowCount(t) * this.rowH(t) - this.gridH());
+        this.scrollY = Math.max(0, Math.min(max, d.sy - (y - d.y0)));
+        this.scrollX = Math.max(0, d.sx - (x - d.x0));
+        this.dirty = true;
+      }
+      return;
+    }
     if (!d) {
       const hit = y > this.RULER && y < this.RULER + this.gridH() && x > this.KEY_W ? this.noteAt(c, t, x, y) : null;
       this.cv.style.cursor = x < this.KEY_W ? 'pointer' : hit ? (hit.edge ? 'e-resize' : 'grab') : (y < this.RULER ? 'col-resize' : 'crosshair');
@@ -169,6 +185,7 @@ const PR = {
       this.sel = new Set(c.notes.filter((n) => { const r = this.rowOfPitch(t, n.p); return r >= r0 && r <= r1 && n.s < b1 && n.s + n.l > b0; }));
       this.dirty = true; return;
     }
+    if (!d.moved && Math.hypot(x - d.x0, y - d.y0) < (e.pointerType === 'touch' ? 8 : 2)) return;
     const db = (x - d.x0) / this.zoom;
     if (d.kind === 'move') {
       const lead = d.orig.find((o) => o.n === d.lead);
@@ -197,7 +214,14 @@ const PR = {
   },
   onUp() {
     const d = this.drag; this.drag = null;
+    const tap = this.tapNote; this.tapNote = null;
     if (!d) return;
+    if (d.kind === 'pan') { if (!d.moved && d.p != null && d.p >= 0) { const f = this.ctx(); if (f) previewNote(f.track, d.p, 0.85); } return; }
+    if (tap && d.kind === 'move' && !d.moved) { // HP: tap nada = hapus
+      const f = this.ctx();
+      if (f) { f.clip.notes = f.clip.notes.filter((n) => n !== tap); this.sel.delete(tap); App.changed(); }
+      return;
+    }
     if ((d.kind === 'move' || d.kind === 'resize') && !d.moved) History.undo.pop();
     if (d.kind !== 'marquee') App.changed();
     this.dirty = true;
@@ -282,7 +306,7 @@ const PR = {
       const p = this.pitchOfRow(t, r);
       if (drum) {
         g.fillStyle = r % 2 ? '#2e353c' : '#353d45'; g.fillRect(0, y, this.KEY_W, rh);
-        g.fillStyle = '#dfe6ec'; g.font = '10px sans-serif'; g.fillText(INSTRUMENTS.drums.pieces[r].label, 4, y + rh / 2 + 4);
+        g.fillStyle = '#dfe6ec'; g.font = '10px sans-serif'; g.fillText(INSTRUMENTS[t.inst].pieces[r].label, 4, y + rh / 2 + 4);
       } else {
         const black = [1, 3, 6, 8, 10].includes(p % 12);
         g.fillStyle = black ? '#15181b' : '#e9edf0'; g.fillRect(0, y, black ? this.KEY_W * 0.62 : this.KEY_W, rh);

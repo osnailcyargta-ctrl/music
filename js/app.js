@@ -12,6 +12,7 @@ const App = {
     E.init();
     await loadWorklets(E.ctx);
     A.init(); PR.init();
+    if (typeof Mobile !== 'undefined') Mobile.init();
     this.bindUI();
     this.loading(true, 'Memuat project…');
     let ok = false;
@@ -40,15 +41,22 @@ const App = {
     this.updateTransportUI();
   },
   async loadNeeded() {
-    const ids = [...new Set(P.tracks.filter((t) => t.type === 'inst').map((t) => t.inst))];
-    await Promise.all(ids.map((id) => this.loadInst(id, true)));
+    // nada persis yang dipakai lagu -> muat rekaman aslinya
+    const need = {};
+    for (const t of P.tracks) {
+      if (t.type !== 'inst' || !INSTRUMENTS[t.inst]) continue;
+      const s = need[t.inst] || (need[t.inst] = new Set());
+      for (const c of t.clips) for (const n of c.notes) s.add(n.p + (t.transpose || 0));
+    }
+    await Promise.all(Object.keys(need).map((id) => this.loadInst(id, true, [...need[id]])));
     await ensureBuiltinLoops(P);
   },
-  async loadInst(id, quiet) {
+  async loadInst(id, quiet, pitches) {
     const def = INSTRUMENTS[id];
-    if (def.loaded) return;
+    if (def.loaded && !pitches) return;
+    if (def.loaded) quiet = true;
     if (!quiet) this.loading(true, 'Memuat sampel ' + def.name + '…');
-    try { await loadInstrument(E.ctx, id); }
+    try { await loadInstrument(E.ctx, id, pitches); }
     catch (e) { console.error(e); this.status('Gagal memuat ' + def.name + ': ' + e.message); }
     if (!quiet) this.loading(false);
   },
@@ -177,7 +185,7 @@ const App = {
     if (now >= last.t1 && !last.next) { this.pause(); }
     // auto-scroll halaman
     const x = A.xOf(UI.playhead);
-    if (x > A.w - 40 || x < 0) UI.scrollX = Math.max(0, UI.playhead * UI.zoom - 60);
+    if (!UI.mobile && (x > A.w - 40 || x < 0)) UI.scrollX = Math.max(0, UI.playhead * UI.zoom - 60);
     A.dirty = true; PR.dirty = true;
   },
   updateTransportUI() {
@@ -185,7 +193,7 @@ const App = {
     $('#btnPlay').classList.toggle('on', T.playing);
     const dubbing = T.recording && T.recInfo && T.recInfo.dubler;
     $('#btnRec').classList.toggle('rec', T.recording && !dubbing);
-    $('#btnDub').classList.toggle('rec', !!dubbing);
+    $('#btnDub').classList.toggle('rec', !!dubbing || !!T.dubTry);
     $('#btnLoop').classList.toggle('on', P.loop.on);
     $('#btnMetro').classList.toggle('on', E.metronome);
   },
@@ -203,7 +211,7 @@ const App = {
     if (A.dirty) { A.draw(); A.dirty = false; }
     if (PR.dirty && this.activeTab() === 'piano') { PR.draw(); PR.dirty = false; }
     this.meters();
-    if (T.recording && T.recInfo && T.recInfo.dubler) DubLive.tick(INSTRUMENTS[T.recInfo.track.inst].drum);
+    if (DubLive.an) DubLive.tick();
     requestAnimationFrame(() => this.frame());
   },
   meters() {
@@ -394,11 +402,11 @@ const App = {
       T.recording = false;
       const info = T.recInfo;
       this.pause();
+      const dubEvents0 = info && info.dubler ? DubLive.stop() : null;
       const blob = await Recorder.stop();
       this.updateTransportUI();
-      DubLive.stop();
+      if (info.dubler) return this.finishDubler(blob, info, dubEvents0);
       if (!blob) return;
-      if (info.dubler) return this.finishDubler(blob, info);
       this.loading(true, 'Memproses rekaman…');
       try {
         const bytes = await blob.arrayBuffer();
@@ -421,7 +429,7 @@ const App = {
       return;
     }
     await E.resume();
-    if (dub === true) return this.startDubler();
+    if (dub === true) return this.startDubler(false);
     let t = P.tracks.find((x) => x.arm) || (UI.selTrack && findTrack(UI.selTrack));
     if (!t || t.type !== 'audio') { History.push(); t = makeTrack('audio'); t.name = 'Rekaman Vokal'; t.arm = true; P.tracks.push(t); this.changed(); }
     try { await Recorder.start(); }
@@ -436,48 +444,76 @@ const App = {
     this.status('● Merekam ke "' + t.name + '"… tekan ● atau Spasi untuk berhenti');
   },
 
-  // ---------- DUBLER: suara -> note ----------
-  async startDubler() {
+  // ---------- DUBLER (real-time): suara -> instrumen live -> note ----------
+  async dublerTarget() {
     let t = UI.selTrack && findTrack(UI.selTrack);
     if (!t || t.type !== 'inst') {
       History.push();
       t = makeTrack('inst', 'piano'); t.name = 'Dubler (Piano)';
       P.tracks.push(t); UI.selTrack = t.id;
-      await this.loadInst('piano');
       this.changed();
     }
-    try { await Recorder.start(); }
+    await this.loadInst(t.inst, false, INSTRUMENTS[t.inst].drum ? null : Array.from({ length: 49 }, (_, i) => 36 + i));
+    this.syncStrips();
+    return t;
+  },
+  async startDubler(tryOnly) {
+    const t = await this.dublerTarget();
+    try { await Recorder.start(true); }
     catch (e) { this.status('Mikrofon tidak bisa diakses: ' + e.message); return; }
-    DubLive.start(Recorder.stream);
-    const recStartT = E.ctx.currentTime;
+    DubLive.start(Recorder.stream, t);
+    $('#dubTitle').textContent = tryOnly ? '🎤 DUBLER — coba live (tidak direkam)' : '🎤 DUBLER — merekam ke "' + t.name + '"';
+    if (tryOnly) { T.dubTry = true; this.updateTransportUI(); return; }
     if (T.playing) this.pause();
     T.recording = true;
     T.recInfo = { track: t, beat: A.snap(UI.playhead), dubler: true };
     UI.playhead = T.recInfo.beat;
     await this.play();
-    T.recInfo.lat = T.segs[0].t0 - recStartT;
     this.updateTransportUI();
-    this.status('🎤 Dubler → "' + t.name + '"… nyanyi / beatbox, tekan 🎤→🎹 lagi untuk jadikan note');
+    this.status('🎤 Dubler → "' + t.name + '" — nyanyi / beatbox, tekan Selesai kalau sudah');
   },
-  toggleDubler() { return T.recording ? this.toggleRecord() : this.toggleRecord(true); },
-  async finishDubler(blob, info) {
-    this.loading(true, 'Dubler: mendeteksi nada…');
+  async toggleDubler(tryOnly) {
+    if (T.dubTry) { T.dubTry = false; DubLive.stop(); await Recorder.stop(); this.updateTransportUI(); this.status('Dubler live dimatikan'); return; }
+    return T.recording ? this.toggleRecord() : this.startDubler(tryOnly);
+  },
+  beatAtTime(t) {
+    let seg = T.segs[0];
+    for (const s of T.segs) if (s.t0 <= t) seg = s;
+    return seg ? seg.b0 + (t - seg.t0) / this.spb() : UI.playhead;
+  },
+  async finishDubler(blob, info, events) {
+    const spb = this.spb();
+    // waktu ctx -> beat relatif awal rekaman
+    const ev = events.map((e) => ({ ...e, t: (this.beatAtTime(e.t) - info.beat) * spb })).filter((e) => e.t > -0.2);
+    ev.forEach((e) => { if (e.t < 0) e.t = 0; });
+    const def = INSTRUMENTS[info.track.inst];
+    const notes = eventsToNotes(ev, spb, def.drum);
+    if (!notes.length) { this.status('Dubler belum menangkap nada — suara lebih keras / dekat mic, atau naikkan Sensitivitas di ⚙'); return; }
+    History.push();
+    const end = Math.max(...notes.map((x) => x.s + x.l));
+    const len = Math.max(4, Math.ceil(end / 4) * 4);
+    const c = makeInstClip(info.beat, len, len, notes);
+    c.name = '🎤 Dubler';
+    info.track.clips.push(c);
+    UI.sel = new Set([c.id]); UI.selTrack = info.track.id;
+    this.openPiano(c, info.track);
+    this.changed();
+    this.status('🎤→🎹 ' + notes.length + ' note tercatat dari suaramu');
+    // simpan juga audio mentahnya di Sound FX
     try {
-      const bytes = await blob.arrayBuffer();
-      const buf = await E.ctx.decodeAudioData(bytes.slice(0));
-      const id = uid('rec');
-      registerAudio(id, 'Dubler take ' + (Object.keys(AUDIO).filter((k) => AUDIO[k].name.startsWith('Dubler')).length + 1), buf, bytes);
-      P.fx.push(id); Panels.renderFx();
-      const lat = Math.max(0, Math.min(buf.duration, info.lat || 0));
-      const n = this.makeDublerClip(info.track, buf, lat, buf.duration - lat, P.bpm, info.beat);
-      this.status(n ? '🎤→🎹 ' + n + ' note dibuat dari suaramu! (audio aslinya ada di Sound FX)' : 'Dubler tidak menemukan nada — coba lebih keras / dekat mic, atau naikkan sensitivitas di ⚙');
-    } catch (e) { console.error(e); this.status('Dubler gagal: ' + e.message); }
-    this.loading(false);
+      if (blob) {
+        const bytes = await blob.arrayBuffer();
+        const buf = await E.ctx.decodeAudioData(bytes.slice(0));
+        registerAudio(uid('rec'), 'Dubler take ' + (Object.values(AUDIO).filter((a) => a.name.startsWith('Dubler')).length + 1), buf, bytes);
+        P.fx = Object.keys(AUDIO).filter((k) => !k.startsWith('loop:') && (P.fx.includes(k) || AUDIO[k].name.startsWith('Dubler take')));
+        Panels.renderFx();
+      }
+    } catch (e) { /* abaikan */ }
   },
   // buat clip nada dari potongan audio; return jumlah note
   makeDublerClip(track, buf, startSec, durSec, bpm, beat) {
     const drum = INSTRUMENTS[track.inst].drum;
-    const notes = drum ? beatboxToDrums(buf, startSec, durSec, bpm) : voiceToNotes(buf, startSec, durSec, bpm);
+    const notes = drum ? beatboxToDrums(buf, startSec, durSec, bpm, INSTRUMENTS[track.inst].dub) : voiceToNotes(buf, startSec, durSec, bpm);
     if (!notes.length) return 0;
     History.push();
     const end = Math.max(...notes.map((x) => x.s + x.l));
@@ -506,16 +542,23 @@ const App = {
     const box = $('#dubCfg');
     if (!box.classList.contains('hidden')) { box.classList.add('hidden'); return; }
     box.innerHTML = '';
+    const chk = (label, val, on) => { const c = h('input', { type: 'checkbox', checked: val }); c.onchange = () => on(c.checked); return h('label', { class: 'check' }, c, ' ' + label); };
     const sel = (opts, val, on) => { const s = h('select', {}, ...opts.map(([v, l]) => h('option', { value: v, selected: String(v) === String(val) }, l))); s.onchange = () => on(s.value); return s; };
     box.append(h('h4', {}, '🎤→🎹 Pengaturan Dubler'),
       h('label', { class: 'slider' }, h('span', { class: 'sl-label' }, 'Skala'), sel(Object.entries(SCALES).map(([k, v]) => [k, v.name]), DUB.scale, (v) => (DUB.scale = v))),
       h('label', { class: 'slider' }, h('span', { class: 'sl-label' }, 'Nada dasar'), sel(NOTE_NAMES.map((n, i) => [i, n]), DUB.root, (v) => (DUB.root = +v))),
       h('label', { class: 'slider' }, h('span', { class: 'sl-label' }, 'Geser oktaf'), sel([[-2, '-2'], [-1, '-1'], [0, '0'], [1, '+1'], [2, '+2']], DUB.octave, (v) => (DUB.octave = +v))),
       Slider({ label: 'Sensitivitas', min: 0, max: 1, step: 0.05, value: DUB.sens, fmt: fmtPct, onInput: (v) => (DUB.sens = v) }),
-      h('p', { class: 'hint' }, 'Pilih track instrumen dulu (mis. Piano / Biola / Drum Kit), lalu tekan 🎤→🎹 (atau D). Track Drum Kit = mode beatbox. Hasil di-quantize sesuai Snap. Clip audio yang sudah ada juga bisa: klik kanan → "Jadikan note".'),
-      h('div', { class: 'btnrow' }, h('button', { onclick: () => box.classList.add('hidden') }, 'Tutup')));
+      Slider({ label: 'Stabil nada', min: 0, max: 1, step: 0.05, value: DUB.stable, fmt: (v) => (v < 0.3 ? 'cepat' : v > 0.7 ? 'sangat stabil' : 'normal'), onInput: (v) => (DUB.stable = v) }),
+      chk('Instrumen bunyi live saat nyanyi', DUB.monitor, (v) => (DUB.monitor = v)),
+      chk('Rapikan ke grid (quantize sesuai Snap)', DUB.quant, (v) => (DUB.quant = v)),
+      h('p', { class: 'hint' }, 'Pilih track instrumen (Piano, Biola, Drum Kit, dll) lalu tekan 🎤→🎹. Melodi: senandung "na-na / du-du" per nada. Drum: bung = kick, tak = snare, dung = tom, tss = hi-hat, dess = crash. Pakai headset supaya suara speaker tidak ikut terdeteksi.'),
+      h('div', { class: 'btnrow' },
+        h('button', { onclick: () => { box.classList.add('hidden'); this.toggleDubler(true); } }, '🎧 Coba live (tanpa rekam)'),
+        h('button', { onclick: () => { box.classList.add('hidden'); this.toggleDubler(false); } }, '● Rekam Dubler'),
+        h('button', { onclick: () => box.classList.add('hidden') }, 'Tutup')));
     const r = anchor.getBoundingClientRect();
-    box.style.left = Math.min(r.left, innerWidth - 320) + 'px'; box.style.top = (r.bottom + 6) + 'px';
+    box.style.left = Math.max(4, Math.min(r.left, innerWidth - 324)) + 'px'; box.style.top = Math.min(r.bottom + 6, innerHeight - 420) + 'px';
     box.classList.remove('hidden');
   },
   renderMasterPct() {
@@ -588,9 +631,9 @@ const App = {
   },
 
   // ---------- UI ----------
-  activeTab() { const b = $('#tabs button.active'); return b ? b.dataset.tab : 'piano'; },
+  activeTab() { const b = $('#tabs button[data-tab].active'); return b ? b.dataset.tab : 'piano'; },
   showTab(name) {
-    document.querySelectorAll('#tabs button').forEach((b) => b.classList.toggle('active', b.dataset.tab === name));
+    document.querySelectorAll('#tabs button[data-tab]').forEach((b) => b.classList.toggle('active', b.dataset.tab === name));
     document.querySelectorAll('.tab-page').forEach((p) => p.classList.toggle('active', p.id === 'page-' + name));
     if (name === 'rack') Panels.renderRack();
     if (name === 'mixer') Panels.renderMixer();
@@ -612,6 +655,7 @@ const App = {
     $('#btnStop').onclick = () => this.stop();
     $('#btnRec').onclick = () => this.toggleRecord();
     $('#btnDub').onclick = () => this.toggleDubler();
+    $('#dubStop').onclick = () => this.toggleDubler();
     $('#btnDubCfg').onclick = (e) => this.dublerSettings(e.currentTarget);
     $('#btnLoop').onclick = () => { P.loop.on = !P.loop.on; this.updateTransportUI(); A.dirty = true; this.queueSave(); if (T.playing) this.reschedule(true); };
     $('#btnMetro').onclick = () => { E.metronome = !E.metronome; this.updateTransportUI(); this.reschedule(true); };
@@ -628,7 +672,7 @@ const App = {
     $('#snap').addEventListener('change', () => { UI.snap = parseFloat($('#snap').value); });
     $('#masterVol').addEventListener('input', () => { P.master.vol = parseFloat($('#masterVol').value); this.renderMasterPct(); if (E.ctx) updateMasterFx(E.ctx, E.master, P); this.queueSave(); });
     document.querySelectorAll('#tools button').forEach((b) => (b.onclick = () => this.setTool(b.dataset.tool)));
-    document.querySelectorAll('#tabs button').forEach((b) => (b.onclick = () => this.showTab(b.dataset.tab)));
+    document.querySelectorAll('#tabs button[data-tab]').forEach((b) => (b.onclick = () => this.showTab(b.dataset.tab)));
     $('#btnImport').onclick = () => $('#fileInput').click();
     $('#fileInput').addEventListener('change', async (e) => { await this.importFiles([...e.target.files]); e.target.value = ''; });
     $('#btnAddInst').onclick = (e) => Menu.show(e.clientX, e.clientY, INSTRUMENT_ORDER.map((id) => ({ label: INSTRUMENTS[id].icon + ' ' + INSTRUMENTS[id].name, fn: () => this.addInstrumentTrack(id) })));

@@ -2,7 +2,9 @@
 <html lang="id">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#111417">
+<meta name="mobile-web-app-capable" content="yes">
 <title>Studio Loop — Web DAW</title>
 <link rel="icon" href="data:,">
 <link rel="stylesheet" href="css/style.css">
@@ -52,6 +54,26 @@
     <div class="status" id="status">Siap</div>
   </header>
 
+  <!-- ============ MOBILE (portrait, gaya CapCut) ============ -->
+  <div id="mTop" class="m-only">
+    <button id="mMenu" class="m-icon" title="Menu">☰</button>
+    <div class="m-title" id="mTitle">Lagu</div>
+    <label class="m-bpm">BPM <input id="mBpm" type="number" min="40" max="240"></label>
+    <button id="mExport" class="m-export">Export</button>
+  </div>
+  <div id="mPreview" class="m-only">
+    <canvas id="mViz"></canvas>
+    <div class="m-now"><div id="mNowInst">—</div><div id="mNowBig">001:1</div></div>
+  </div>
+  <div id="mCtrl" class="m-only">
+    <span id="mTime">0:00 / 0:00</span>
+    <button id="mPlay" class="m-play">▶</button>
+    <span class="m-ctrl-r">
+      <button id="mUndo" class="m-icon">↶</button><button id="mRedo" class="m-icon">↷</button><button id="mLoop" class="m-icon">⟲</button>
+    </span>
+  </div>
+  <button id="mBrowserBtn" class="c-only" title="Browser">☰ Browser</button>
+
   <div id="main">
     <!-- ============ BROWSER ============ -->
     <aside id="browser">
@@ -99,6 +121,7 @@
   <div id="dockResize" title="Seret untuk ubah tinggi"></div>
   <section id="dock">
     <div class="tabs" id="tabs">
+      <button id="dockClose" class="m-sheet-close" title="Tutup">✕</button>
       <button data-tab="piano" class="active">🎹 Piano Roll</button>
       <button data-tab="rack">🥁 Channel Rack</button>
       <button data-tab="mixer">🎚 Mixer</button>
@@ -132,8 +155,11 @@
   </section>
 </div>
 
+<nav id="mTools" class="m-only"></nav>
+<div id="mSheet" class="hidden"><div class="m-sheet-head"><span id="mSheetTitle"></span><button id="mSheetClose">✓</button></div><div id="mSheetBody"></div></div>
+<div id="mBackdrop" class="hidden"></div>
 <div id="ctxMenu" class="ctx-menu hidden"></div>
-<div id="dubHud" class="hidden"><div class="dub-title">🎤 DUBLER merekam…</div><div id="dubNote">—</div><div class="dub-bar"><div id="dubLevel"></div></div><div class="hint">Nyanyi / ngomong nada, atau beatbox (bum = kick, ka = snare, tss = hi-hat) kalau track-nya Drum Kit. Tekan 🎤→🎹 / D / Spasi untuk selesai.</div></div>
+<div id="dubHud" class="hidden"><div class="dub-title" id="dubTitle">🎤 DUBLER LIVE</div><div id="dubNote">—</div><div class="dub-sub" id="dubCount">0 note</div><div class="dub-bar"><div id="dubLevel"></div><div id="dubGate"></div></div><div class="hint" id="dubHint">Nyanyi / senandung "na-na-na" → instrumen langsung bunyi. Drum: bung, tak, dung, tss, dess. Pakai headset biar lebih akurat.</div><button id="dubStop">■ Selesai</button></div>
 <div id="dubCfg" class="popover hidden"></div>
 <div id="dropOverlay" class="hidden">Lepaskan file audio untuk dijadikan clip / sound effect</div>
 <div id="loading" class="hidden"><div class="spinner"></div><span id="loadingText">Memuat sampel…</span></div>
@@ -146,5 +172,6 @@
 <script src="js/pianoroll.js"></script>
 <script src="js/panels.js"></script>
 <script src="js/app.js"></script>
+<script src="js/mobile.js"></script>
 </body>
 </html>

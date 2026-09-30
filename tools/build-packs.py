@@ -1,32 +1,24 @@
 #!/usr/bin/env python3
-"""Bungkus MP3 di samples/<folder>/ jadi samples/packs/<id>.js (base64)
-agar studio tetap jalan saat index.html dibuka langsung dari file:// ."""
-import base64, json, os, re
+"""Bungkus tiap MP3 di samples/ jadi samples/packs/<path__dengan__garis>.js (base64),
+supaya studio tetap jalan saat index.html dibuka langsung dari file:// .
+Jalankan ulang setelah menambah / mengganti sampel."""
+import base64, json, os
 
-ROOT = os.path.join(os.path.dirname(__file__), '..')
+ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
 SAMPLES = os.path.join(ROOT, 'samples')
 OUT = os.path.join(SAMPLES, 'packs')
 os.makedirs(OUT, exist_ok=True)
-
-src = open(os.path.join(ROOT, 'js', 'instruments.js'), encoding='utf-8').read()
-
-def pack(pid, folder, names):
-    data = {}
-    for n in names:
-        with open(os.path.join(SAMPLES, folder, n + '.mp3'), 'rb') as f:
-            data[n] = base64.b64encode(f.read()).decode()
-    with open(os.path.join(OUT, pid + '.js'), 'w') as f:
-        f.write('window.SAMPLE_PACKS=window.SAMPLE_PACKS||{};window.SAMPLE_PACKS[%s]=%s;\n' % (json.dumps(pid), json.dumps(data)))
-    print(pid, len(names))
-
-for folder in sorted(os.listdir(SAMPLES)):
-    d = os.path.join(SAMPLES, folder)
-    if folder == 'packs' or not os.path.isdir(d):
+n = 0
+for dp, dn, fn in os.walk(SAMPLES):
+    if os.path.abspath(dp).startswith(os.path.abspath(OUT)):
         continue
-    names = sorted(x[:-4] for x in os.listdir(d) if x.endswith('.mp3'))
-    if folder == 'drums':
-        loops = ['breakbeat', 'conga-rhythm']
-        pack('drums', 'drums', [n for n in names if n not in loops])
-        pack('loops', 'drums', loops)
-    else:
-        pack(folder, folder, names)
+    for f in fn:
+        if not f.endswith('.mp3'):
+            continue
+        rel = os.path.relpath(os.path.join(dp, f), SAMPLES)[:-4].replace(os.sep, '/')
+        with open(os.path.join(dp, f), 'rb') as fh:
+            b64 = base64.b64encode(fh.read()).decode()
+        with open(os.path.join(OUT, rel.replace('/', '__') + '.js'), 'w') as fh:
+            fh.write('window.SAMPLE_PACKS=window.SAMPLE_PACKS||{};window.SAMPLE_PACKS[%s]=%s;\n' % (json.dumps(rel), json.dumps(b64)))
+        n += 1
+print(n, 'pack')
